@@ -16,8 +16,7 @@ impl HttpClient {
         Ok(ret)
     }
 
-    fn send(&self, req: &HttpRequest) -> std::io::Result<()> {
-        let mut writer = BufWriter::new(&self.stream);
+    fn send<T: Write>(&self, req: &HttpRequest, mut writer: BufWriter<T>) -> std::io::Result<()> {
         match &req.method {
             HttpMethod::GET => write!(writer, "GET {} HTTP/1.0\r\n", req.path)?,
             HttpMethod::POST => write!(writer, "POST {} HTTP/1.0\r\n", req.path)?,
@@ -35,9 +34,7 @@ impl HttpClient {
         Ok(())
     }
 
-    fn recv(&self) -> Result<HttpResponse, HttpError> {
-        let mut reader = BufReader::new(&self.stream);
-
+    fn recv<T: Read>(&self, mut reader: BufReader<T>) -> Result<HttpResponse, HttpError> {
         let mut line = String::new();
         reader.read_line(&mut line).map_err(HttpError::from)?;
         let mut iter = line.splitn(3, " ");
@@ -96,8 +93,9 @@ impl HttpClient {
     }
 
     fn request(&self, request: &HttpRequest) -> Result<HttpResponse, HttpError> {
-        self.send(request).map_err(HttpError::from)?;
-        self.recv()
+        self.send(request, BufWriter::new(&self.stream))
+            .map_err(HttpError::from)?;
+        self.recv(BufReader::new(&self.stream))
     }
 }
 
