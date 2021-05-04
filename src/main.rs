@@ -20,9 +20,10 @@ impl HttpClient {
     fn send<T: Write>(&self, req: &HttpRequest, mut writer: BufWriter<T>) -> std::io::Result<()> {
         write!(
             writer,
-            "{} {} HTTP/1.0\r\n",
+            "{} {} {}\r\n",
             req.method.to_string(),
-            req.path
+            req.path,
+            req.version.string()
         )?;
 
         req.headers.write_to(&mut writer)?;
@@ -40,12 +41,15 @@ impl HttpClient {
         let mut line = String::new();
         reader.read_line(&mut line).map_err(HttpError::from)?;
         let mut iter = line.splitn(3, " ");
-        iter.next();
-        let status: u16 = iter
-            .next()
-            .ok_or_else(|| HttpError::HttpSyntaxError)?
-            .parse()
-            .map_err(|_| HttpError::HttpSyntaxError)?;
+        let version = HttpVersion::from(iter.next().ok_or_else(|| HttpError::HttpSyntaxError)?);
+        if let HttpVersion::UNSUPPORTED = version {
+            return Err(HttpError::HttpSyntaxError);
+        }
+
+        let status = HttpStatus::from(iter.next().ok_or_else(|| HttpError::HttpSyntaxError)?);
+        if let HttpStatus::Invalid = status {
+            return Err(HttpError::HttpSyntaxError);
+        }
 
         let mut headers = HttpHeaders::new();
         headers.read_from(&mut reader)?;
@@ -65,6 +69,7 @@ impl HttpClient {
         };
 
         Ok(HttpResponse {
+            version: version,
             status: status,
             headers: headers,
             body: body,
@@ -94,16 +99,90 @@ impl HttpMethod {
 }
 
 #[derive(Debug)]
+enum HttpVersion {
+    HTTP1_0,
+    HTTP1_1,
+    UNSUPPORTED,
+}
+
+impl HttpVersion {
+    fn string(&self) -> &str {
+        match self {
+            Self::HTTP1_0 => "HTTP/1.0",
+            Self::HTTP1_1 => "HTTP/1.1",
+            _ => "UNSUPPORTED",
+        }
+    }
+}
+
+impl From<&str> for HttpVersion {
+    fn from(v: &str) -> Self {
+        match v {
+            "HTTP/1.0" => Self::HTTP1_0,
+            "HTTP/1.1" => Self::HTTP1_1,
+            _ => Self::UNSUPPORTED,
+        }
+    }
+}
+
+#[derive(Debug)]
+enum HttpStatus {
+    Ok,
+    NotFound,
+    Invalid,
+}
+
+impl HttpStatus {
+    fn code(&self) -> u32 {
+        match self {
+            Self::Ok => 200,
+            Self::NotFound => 404,
+            _ => 0,
+        }
+    }
+
+    fn string(&self) -> &str {
+        match self {
+            Self::Ok => "OK",
+            Self::NotFound => "Not Found",
+            _ => "",
+        }
+    }
+}
+
+impl From<u32> for HttpStatus {
+    fn from(v: u32) -> Self {
+        match v {
+            200 => Self::Ok,
+            404 => Self::NotFound,
+            _ => Self::Invalid,
+        }
+    }
+}
+
+impl From<&str> for HttpStatus {
+    fn from(v: &str) -> Self {
+        match v {
+            "200" => Self::Ok,
+            "404" => Self::NotFound,
+            _ => Self::Invalid,
+        }
+    }
+}
+
+#[derive(Debug)]
 struct HttpRequest {
     method: HttpMethod,
     path: String,
+    version: HttpVersion,
     headers: HttpHeaders,
     body: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct HttpResponse {
-    status: u16,
+    version: HttpVersion,
+    status: HttpStatus,
     headers: HttpHeaders,
     body: Vec<u8>,
 }
@@ -140,7 +219,8 @@ impl HttpServer {
     fn handle(&self, stream: TcpStream) -> Result<(), HttpError> {
         let req = self.recv(BufReader::new(&stream))?;
         let resp = HttpResponse {
-            status: 200,
+            version: HttpVersion::HTTP1_0,
+            status: HttpStatus::Ok,
             headers: HttpHeaders::new(),
             body: Vec::new(),
         };
@@ -162,12 +242,11 @@ impl HttpServer {
             .next()
             .ok_or_else(|| HttpError::HttpSyntaxError)?
             .to_string();
-        let version = match iter.next().ok_or_else(|| HttpError::HttpSyntaxError)? {
-            "HTTP/1.0" => "1.0",
-            "HTTP/1.1" => "1.1",
-            _ => return Err(HttpError::HttpSyntaxError),
-        };
 
+        let version = HttpVersion::from(iter.next().ok_or_else(|| HttpError::HttpSyntaxError)?);
+        if let HttpVersion::UNSUPPORTED = version {
+            return Err(HttpError::HttpSyntaxError);
+        }
         let mut headers = HttpHeaders::new();
 
         headers.read_from(&mut reader)?;
@@ -189,13 +268,20 @@ impl HttpServer {
         Ok(HttpRequest {
             method: method,
             path: path,
+            version: version,
             headers: headers,
             body: body,
         })
     }
 
     fn send<T: Write>(&self, resp: &HttpResponse, mut writer: BufWriter<T>) -> std::io::Result<()> {
-        write!(writer, "HTTP/1.1 200 OK\r\n",)?;
+        write!(
+            writer,
+            "{} {} {}\r\n",
+            resp.version.string(),
+            resp.status.code(),
+            resp.status.string()
+        )?;
         resp.headers.write_to(&mut writer)?;
         if !resp.headers.contains_key(&"content-length".to_string()) {
             write!(writer, "content-length: {}\r\n", resp.body.len())?;
@@ -277,6 +363,7 @@ fn main() -> Result<(), HttpError> {
         let req = HttpRequest {
             method: HttpMethod::GET,
             path: (&"/").to_string(),
+            version: HttpVersion::HTTP1_0,
             headers: HttpHeaders::new(),
             body: Vec::new(),
         };
