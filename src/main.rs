@@ -83,7 +83,7 @@ impl HttpClient {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq)]
 enum HttpMethod {
     GET,
     POST,
@@ -198,15 +198,18 @@ enum HttpError {
     HttpSyntaxError,
 }
 
-#[derive(Debug)]
 struct HttpServer {
     listener: TcpListener,
+    handler: Box<dyn Handler>,
 }
 
 impl HttpServer {
-    fn new<T: ToSocketAddrs>(addr: T) -> Result<HttpServer, HttpError> {
+    fn new<T: ToSocketAddrs>(addr: T, handler: Box<dyn Handler>) -> Result<HttpServer, HttpError> {
         let listener = TcpListener::bind(addr).map_err(HttpError::from)?;
-        Ok(HttpServer { listener: listener })
+        Ok(HttpServer {
+            listener: listener,
+            handler: handler,
+        })
     }
 
     fn listen(&self) -> Result<(), HttpError> {
@@ -217,13 +220,8 @@ impl HttpServer {
     }
 
     fn handle(&self, stream: TcpStream) -> Result<(), HttpError> {
-        let req = self.recv(BufReader::new(&stream))?;
-        let resp = HttpResponse {
-            version: HttpVersion::HTTP1_0,
-            status: HttpStatus::Ok,
-            headers: HttpHeaders::new(),
-            body: Vec::new(),
-        };
+        let mut req = self.recv(BufReader::new(&stream))?;
+        let resp = self.handler.handle(&mut req)?;
         self.send(&resp, BufWriter::new(&stream))
             .map_err(HttpError::from)?;
         Ok(())
@@ -292,6 +290,61 @@ impl HttpServer {
         writer.flush()?;
         Ok(())
     }
+}
+
+trait Handler {
+    fn handle(&self, req: &mut HttpRequest) -> Result<HttpResponse, HttpError>;
+}
+
+struct Router {
+    rules: Vec<Rule>,
+}
+
+impl Handler for Router {
+    fn handle(&self, req: &mut HttpRequest) -> Result<HttpResponse, HttpError> {
+        for rule in &self.rules {
+            if req.method == rule.method && req.path == rule.path {
+                return rule.handler.handle(req);
+            }
+        }
+        Ok(HttpResponse {
+            version: match req.version {
+                HttpVersion::HTTP1_0 => HttpVersion::HTTP1_0,
+                HttpVersion::HTTP1_1 => HttpVersion::HTTP1_1,
+                _ => HttpVersion::UNSUPPORTED,
+            },
+            status: HttpStatus::NotFound,
+            headers: HttpHeaders::new(),
+            body: Vec::new(),
+        })
+    }
+}
+
+impl Handler for fn(&mut HttpRequest) -> Result<HttpResponse, HttpError> {
+    fn handle(&self, req: &mut HttpRequest) -> Result<HttpResponse, HttpError> {
+        (self)(req)
+    }
+}
+
+impl Router {
+    fn add(
+        &mut self,
+        method: HttpMethod,
+        path: String,
+        handler: fn(&mut HttpRequest) -> Result<HttpResponse, HttpError>,
+    ) {
+        self.rules.push(Rule {
+            method: method,
+            path: path,
+            handler: Box::new(handler),
+        })
+    }
+}
+
+struct Rule {
+    method: HttpMethod,
+    path: String,
+    handler: Box<dyn Handler>,
 }
 
 #[derive(Debug)]
@@ -371,7 +424,16 @@ fn main() -> Result<(), HttpError> {
         println!("{:?}", resp);
         println!("{:?}", String::from_utf8(resp.body).unwrap());
     } else if &args[1] == "server" {
-        let server = HttpServer::new("127.0.0.1:8080")?;
+        let mut router = Router { rules: Vec::new() };
+        router.add(HttpMethod::GET, "/".to_string(), |_| {
+            Ok(HttpResponse {
+                version: HttpVersion::HTTP1_1,
+                status: HttpStatus::Ok,
+                headers: HttpHeaders::new(),
+                body: Vec::new(),
+            })
+        });
+        let server = HttpServer::new("127.0.0.1:8080", Box::new(router))?;
         server.listen()?;
     }
 
