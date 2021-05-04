@@ -156,7 +156,7 @@ impl Router {
     }
 }
 
-pub struct Rule {
+struct Rule {
     method: HttpMethod,
     path: String,
     handler: Box<dyn Handler>,
