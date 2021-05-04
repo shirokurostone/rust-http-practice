@@ -5,8 +5,8 @@ use std::net::{TcpListener, TcpStream, ToSocketAddrs};
 use crate::common::*;
 
 pub struct HttpServer {
-    pub listener: TcpListener,
-    pub handler: Box<dyn Handler>,
+    listener: TcpListener,
+    handler: Box<dyn Handler>,
 }
 
 impl HttpServer {
@@ -28,7 +28,7 @@ impl HttpServer {
         Ok(())
     }
 
-    pub fn handle(&self, stream: TcpStream) -> Result<(), HttpError> {
+    fn handle(&self, stream: TcpStream) -> Result<(), HttpError> {
         let mut req = self.recv(BufReader::new(&stream))?;
         let resp = self.handler.handle(&mut req)?;
         self.send(&resp, BufWriter::new(&stream))
@@ -36,7 +36,7 @@ impl HttpServer {
         Ok(())
     }
 
-    pub fn recv<T: Read>(&self, mut reader: BufReader<T>) -> Result<HttpRequest, HttpError> {
+    fn recv<T: Read>(&self, mut reader: BufReader<T>) -> Result<HttpRequest, HttpError> {
         let mut line = String::new();
         reader.read_line(&mut line).map_err(HttpError::from)?;
         let mut iter = line.trim_end_matches("\r\n").splitn(3, " ");
@@ -77,7 +77,7 @@ impl HttpServer {
         })
     }
 
-    pub fn send<T: Write>(
+    fn send<T: Write>(
         &self,
         resp: &HttpResponse,
         mut writer: BufWriter<T>,

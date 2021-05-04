@@ -6,7 +6,7 @@ use crate::common::*;
 
 #[derive(Debug)]
 pub struct HttpClient {
-    pub stream: TcpStream,
+    stream: TcpStream,
 }
 
 impl HttpClient {
@@ -16,7 +16,7 @@ impl HttpClient {
         Ok(ret)
     }
 
-    pub fn send<T: Write>(
+    fn send<T: Write>(
         &self,
         req: &HttpRequest,
         mut writer: BufWriter<T>,
@@ -40,7 +40,7 @@ impl HttpClient {
         Ok(())
     }
 
-    pub fn recv<T: Read>(&self, mut reader: BufReader<T>) -> Result<HttpResponse, HttpError> {
+    fn recv<T: Read>(&self, mut reader: BufReader<T>) -> Result<HttpResponse, HttpError> {
         let mut line = String::new();
         reader.read_line(&mut line).map_err(HttpError::from)?;
         let mut iter = line.splitn(3, " ");
