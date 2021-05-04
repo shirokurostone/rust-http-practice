@@ -1,5 +1,5 @@
 [package]
-name = "rust-httpclient-practice"
+name = "rust-http-practice"
 version = "0.1.0"
 authors = ["shirokurostone <426017+shirokurostone@users.noreply.github.com>"]
 edition = "2018"
