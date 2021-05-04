@@ -22,7 +22,7 @@ fn main() -> Result<(), HttpError> {
         println!("{:?}", resp);
         println!("{:?}", String::from_utf8(resp.body).unwrap());
     } else if &args[1] == "server" {
-        let mut router = Router { rules: Vec::new() };
+        let mut router = Router::new();
         router.add(HttpMethod::GET, "/".to_string(), |_| {
             Ok(HttpResponse {
                 version: HttpVersion::HTTP1_1,

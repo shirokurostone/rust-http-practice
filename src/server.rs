@@ -106,7 +106,7 @@ pub trait Handler {
 }
 
 pub struct Router {
-    pub rules: Vec<Rule>,
+    rules: Vec<Rule>,
 }
 
 impl Handler for Router {
@@ -136,6 +136,12 @@ impl Handler for fn(&mut HttpRequest) -> Result<HttpResponse, HttpError> {
 }
 
 impl Router {
+    pub fn new() -> Router{
+        Router{
+            rules: Vec::new(),
+        }
+    }
+
     pub fn add(
         &mut self,
         method: HttpMethod,
