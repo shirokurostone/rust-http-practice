@@ -256,11 +256,7 @@ impl HttpServer {
                 reader.read_to_end(&mut body)?;
                 body
             }
-            None => {
-                let mut body = Vec::new();
-                reader.read_to_end(&mut body)?;
-                body
-            }
+            None => Vec::new(),
         };
 
         Ok(HttpRequest {
