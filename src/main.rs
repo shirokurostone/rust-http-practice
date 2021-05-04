@@ -367,7 +367,7 @@ impl HttpHeaders {
             let mut line = String::new();
             let size = reader.read_line(&mut line).map_err(HttpError::from)?;
             if size == 0 {
-                panic!();
+                return Err(HttpError::HttpSyntaxError);
             }
 
             let line_str = line.trim_end_matches("\r\n");
