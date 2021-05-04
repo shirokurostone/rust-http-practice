@@ -24,9 +24,8 @@ impl HttpClient {
             req.method.to_string(),
             req.path
         )?;
-        for (key, value) in &req.headers {
-            write!(writer, "{}: {}\r\n", key, value)?;
-        }
+
+        req.headers.write_to(&mut writer)?;
         if !req.headers.contains_key(&"content-length".to_string()) {
             write!(writer, "content-length: {}\r\n", req.body.len())?;
         }
@@ -47,37 +46,14 @@ impl HttpClient {
             .ok_or_else(|| HttpError::HttpSyntaxError)?
             .parse()
             .map_err(|_| HttpError::HttpSyntaxError)?;
-        let mut headers: HashMap<String, String> = HashMap::new();
 
-        loop {
-            let mut line = String::new();
-            let size = reader.read_line(&mut line).map_err(HttpError::from)?;
-            if size == 0 {
-                panic!();
-            }
+        let mut headers = HttpHeaders::new();
+        headers.read_from(&mut reader)?;
 
-            let line_str = line.trim_end_matches("\r\n");
-            if line_str == "" {
-                break;
-            }
-            let mut iter = line_str.splitn(2, ":");
-            let key = iter
-                .next()
-                .ok_or_else(|| HttpError::HttpSyntaxError)?
-                .to_ascii_lowercase();
-            let value = iter
-                .next()
-                .ok_or_else(|| HttpError::HttpSyntaxError)?
-                .trim_start()
-                .to_string();
-
-            headers.insert(key, value);
-        }
-
-        let body = match headers.get(&"content-length".to_string()) {
+        let body = match headers.content_length() {
+            Some(0) => Vec::new(),
             Some(v) => {
-                let size = v.parse::<usize>().map_err(|_| HttpError::HttpSyntaxError)?;
-                let mut body = Vec::with_capacity(size);
+                let mut body = Vec::with_capacity(v);
                 reader.read_to_end(&mut body)?;
                 body
             }
@@ -121,14 +97,14 @@ impl HttpMethod {
 struct HttpRequest {
     method: HttpMethod,
     path: String,
-    headers: HashMap<String, String>,
+    headers: HttpHeaders,
     body: Vec<u8>,
 }
 
 #[derive(Debug)]
 struct HttpResponse {
     status: u16,
-    headers: HashMap<String, String>,
+    headers: HttpHeaders,
     body: Vec<u8>,
 }
 
@@ -165,7 +141,7 @@ impl HttpServer {
         let req = self.recv(BufReader::new(&stream))?;
         let resp = HttpResponse {
             status: 200,
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: Vec::new(),
         };
         self.send(&resp, BufWriter::new(&stream))
@@ -192,8 +168,66 @@ impl HttpServer {
             _ => return Err(HttpError::HttpSyntaxError),
         };
 
-        let mut headers: HashMap<String, String> = HashMap::new();
+        let mut headers = HttpHeaders::new();
 
+        headers.read_from(&mut reader)?;
+
+        let body = match headers.content_length() {
+            Some(0) => Vec::new(),
+            Some(v) => {
+                let mut body = Vec::with_capacity(v);
+                reader.read_to_end(&mut body)?;
+                body
+            }
+            None => {
+                let mut body = Vec::new();
+                reader.read_to_end(&mut body)?;
+                body
+            }
+        };
+
+        Ok(HttpRequest {
+            method: method,
+            path: path,
+            headers: headers,
+            body: body,
+        })
+    }
+
+    fn send<T: Write>(&self, resp: &HttpResponse, mut writer: BufWriter<T>) -> std::io::Result<()> {
+        write!(writer, "HTTP/1.1 200 OK\r\n",)?;
+        resp.headers.write_to(&mut writer)?;
+        if !resp.headers.contains_key(&"content-length".to_string()) {
+            write!(writer, "content-length: {}\r\n", resp.body.len())?;
+        }
+
+        write!(writer, "\r\n")?;
+        writer.write_all(&resp.body)?;
+        writer.flush()?;
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+struct HttpHeaders {
+    headers: HashMap<String, String>,
+}
+
+impl HttpHeaders {
+    fn new() -> HttpHeaders {
+        HttpHeaders {
+            headers: HashMap::new(),
+        }
+    }
+
+    fn write_to<T: Write>(&self, writer: &mut BufWriter<T>) -> std::io::Result<()> {
+        for (key, value) in &self.headers {
+            write!(writer, "{}: {}\r\n", key, value)?;
+        }
+        Ok(())
+    }
+
+    fn read_from<T: Read>(&mut self, reader: &mut BufReader<T>) -> Result<(), HttpError> {
         loop {
             let mut line = String::new();
             let size = reader.read_line(&mut line).map_err(HttpError::from)?;
@@ -216,48 +250,23 @@ impl HttpServer {
                 .trim_start()
                 .to_string();
 
-            headers.insert(key, value);
+            self.headers.insert(key, value);
         }
-
-        let body = match headers.get(&"content-length".to_string()) {
-            Some(v) => {
-                if v == "0" {
-                    Vec::new()
-                } else {
-                    let size = v.parse::<usize>().map_err(|_| HttpError::HttpSyntaxError)?;
-                    let mut body = Vec::with_capacity(size);
-                    reader.read_to_end(&mut body)?;
-                    body
-                }
-            }
-            None => {
-                let mut body = Vec::new();
-                reader.read_to_end(&mut body)?;
-                body
-            }
-        };
-
-        Ok(HttpRequest {
-            method: method,
-            path: path,
-            headers: headers,
-            body: body,
-        })
+        Ok(())
     }
 
-    fn send<T: Write>(&self, resp: &HttpResponse, mut writer: BufWriter<T>) -> std::io::Result<()> {
-        write!(writer, "HTTP/1.1 200 OK\r\n",)?;
-        for (key, value) in &resp.headers {
-            write!(writer, "{}: {}\r\n", key, value)?;
+    fn content_length(&self) -> Option<usize> {
+        match self.headers.get(&"content-length".to_string()) {
+            Some(v) => match v.parse::<usize>() {
+                Ok(s) => Some(s),
+                Err(_) => None,
+            },
+            None => None,
         }
-        if !resp.headers.contains_key(&"content-length".to_string()) {
-            write!(writer, "content-length: {}\r\n", resp.body.len())?;
-        }
+    }
 
-        write!(writer, "\r\n")?;
-        writer.write_all(&resp.body)?;
-        writer.flush()?;
-        Ok(())
+    fn contains_key(&self, key: &String) -> bool {
+        self.headers.contains_key(key)
     }
 }
 
@@ -268,7 +277,7 @@ fn main() -> Result<(), HttpError> {
         let req = HttpRequest {
             method: HttpMethod::GET,
             path: (&"/").to_string(),
-            headers: HashMap::new(),
+            headers: HttpHeaders::new(),
             body: Vec::new(),
         };
         let resp = client.request(&req)?;
