@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
 use thiserror::Error;
+use url::ParseError;
 
 #[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HttpMethod {
@@ -116,6 +117,13 @@ pub enum HttpError {
     },
     #[error("syntax error")]
     HttpSyntaxError,
+    #[error("UrlParseError : {source:?}")]
+    UrlParseError {
+        #[from]
+        source: url::ParseError,
+    },
+    #[error("url format error")]
+    UrlFormatError,
 }
 
 #[derive(Debug)]

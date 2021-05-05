@@ -1,6 +1,7 @@
 use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
 use std::net::{TcpStream, ToSocketAddrs};
+use url::Url;
 
 use crate::common::*;
 
@@ -79,5 +80,24 @@ impl HttpClient {
         self.send(request, BufWriter::new(&self.stream))
             .map_err(HttpError::from)?;
         self.recv(BufReader::new(&self.stream))
+    }
+
+    pub fn get(url: String) -> Result<HttpResponse, HttpError> {
+        let url = Url::parse(&url).map_err(HttpError::from)?;
+        let addrs = url
+            .socket_addrs(|| Some(80))
+            .map_err(|_| HttpError::UrlFormatError)?;
+        let addr = addrs.first().ok_or_else(|| HttpError::UrlFormatError)?;
+
+        let client = HttpClient::new(addr)?;
+        let req = HttpRequest {
+            method: HttpMethod::GET,
+            path: (url.path()).to_string(),
+            version: HttpVersion::HTTP1_0,
+            headers: HttpHeaders::new(),
+            body: Vec::new(),
+        };
+        let resp = client.request(&req)?;
+        Ok(resp)
     }
 }

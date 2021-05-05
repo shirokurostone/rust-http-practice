@@ -10,15 +10,7 @@ use crate::server::*;
 fn main() -> Result<(), HttpError> {
     let args = env::args().collect::<Vec<String>>();
     if &args[1] == "client" {
-        let client = HttpClient::new("127.0.0.1:8080")?;
-        let req = HttpRequest {
-            method: HttpMethod::GET,
-            path: (&"/").to_string(),
-            version: HttpVersion::HTTP1_0,
-            headers: HttpHeaders::new(),
-            body: Vec::new(),
-        };
-        let resp = client.request(&req)?;
+        let resp = HttpClient::get(String::from(&args[2]))?;
         println!("{:?}", resp);
         println!("{:?}", String::from_utf8(resp.body).unwrap());
     } else if &args[1] == "server" {
