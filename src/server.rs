@@ -117,11 +117,7 @@ impl Handler for Router {
             }
         }
         Ok(HttpResponse {
-            version: match req.version {
-                HttpVersion::HTTP1_0 => HttpVersion::HTTP1_0,
-                HttpVersion::HTTP1_1 => HttpVersion::HTTP1_1,
-                _ => HttpVersion::UNSUPPORTED,
-            },
+            version: req.version,
             status: HttpStatus::NotFound,
             headers: HttpHeaders::new(),
             body: Vec::new(),

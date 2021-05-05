@@ -3,7 +3,7 @@ use std::io::prelude::*;
 use std::io::{BufReader, BufWriter};
 use thiserror::Error;
 
-#[derive(Debug, PartialEq, Eq)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HttpMethod {
     GET,
     POST,
@@ -18,7 +18,7 @@ impl HttpMethod {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HttpVersion {
     HTTP1_0,
     HTTP1_1,
@@ -45,7 +45,7 @@ impl From<&str> for HttpVersion {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq)]
 pub enum HttpStatus {
     Ok,
     NotFound,
