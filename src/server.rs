@@ -151,3 +151,89 @@ struct Rule {
     path: String,
     handler: Box<dyn Handler>,
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_router_add() {
+        let mut router = Router::new();
+
+        let handler: fn(&mut HttpRequest) -> Result<HttpResponse, HttpError> =
+            |_| Err(HttpError::HttpSyntaxError);
+        router.add(HttpMethod::GET, String::from("/"), handler);
+
+        assert_eq!(1, router.rules.len());
+        assert_eq!(HttpMethod::GET, router.rules[0].method);
+        assert_eq!(String::from("/"), router.rules[0].path);
+    }
+
+    fn test_router_handle_setup() -> Router {
+        let mut router = Router::new();
+
+        let handler: fn(&mut HttpRequest) -> Result<HttpResponse, HttpError> = |_| {
+            Ok(HttpResponse {
+                version: HttpVersion::HTTP1_1,
+                status: HttpStatus::Ok,
+                headers: HttpHeaders::new(),
+                body: Vec::new(),
+            })
+        };
+        router.add(HttpMethod::GET, String::from("/ok"), handler);
+
+        router
+    }
+
+    #[test]
+    fn test_router_handle_ok() {
+        let router = test_router_handle_setup();
+
+        let mut req = HttpRequest {
+            method: HttpMethod::GET,
+            path: String::from("/ok"),
+            version: HttpVersion::HTTP1_1,
+            headers: HttpHeaders::new(),
+            body: Vec::new(),
+        };
+        let expected = HttpResponse {
+            version: HttpVersion::HTTP1_1,
+            status: HttpStatus::Ok,
+            headers: HttpHeaders::new(),
+            body: Vec::new(),
+        };
+
+        let actual = router.handle(&mut req).unwrap();
+
+        assert_eq!(expected.version, actual.version);
+        assert_eq!(expected.status, actual.status);
+        // assert_eq!(expected.headers, actual.headers);
+        assert_eq!(expected.body, actual.body);
+    }
+
+    #[test]
+    fn test_router_handle_notfound() {
+        let router = test_router_handle_setup();
+
+        let mut req = HttpRequest {
+            method: HttpMethod::GET,
+            path: String::from("/"),
+            version: HttpVersion::HTTP1_1,
+            headers: HttpHeaders::new(),
+            body: Vec::new(),
+        };
+        let expected = HttpResponse {
+            version: HttpVersion::HTTP1_1,
+            status: HttpStatus::NotFound,
+            headers: HttpHeaders::new(),
+            body: Vec::new(),
+        };
+
+        let actual = router.handle(&mut req).unwrap();
+
+        assert_eq!(expected.version, actual.version);
+        assert_eq!(expected.status, actual.status);
+        // assert_eq!(expected.headers, actual.headers);
+        assert_eq!(expected.body, actual.body);
+    }
+}
