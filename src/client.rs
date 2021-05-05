@@ -16,11 +16,7 @@ impl HttpClient {
         Ok(ret)
     }
 
-    fn send<T: Write>(
-        &self,
-        req: &HttpRequest,
-        mut writer: BufWriter<T>,
-    ) -> std::io::Result<()> {
+    fn send<T: Write>(&self, req: &HttpRequest, mut writer: BufWriter<T>) -> std::io::Result<()> {
         write!(
             writer,
             "{} {} {}\r\n",

@@ -77,11 +77,7 @@ impl HttpServer {
         })
     }
 
-    fn send<T: Write>(
-        &self,
-        resp: &HttpResponse,
-        mut writer: BufWriter<T>,
-    ) -> std::io::Result<()> {
+    fn send<T: Write>(&self, resp: &HttpResponse, mut writer: BufWriter<T>) -> std::io::Result<()> {
         write!(
             writer,
             "{} {} {}\r\n",
@@ -132,10 +128,8 @@ impl Handler for fn(&mut HttpRequest) -> Result<HttpResponse, HttpError> {
 }
 
 impl Router {
-    pub fn new() -> Router{
-        Router{
-            rules: Vec::new(),
-        }
+    pub fn new() -> Router {
+        Router { rules: Vec::new() }
     }
 
     pub fn add(
