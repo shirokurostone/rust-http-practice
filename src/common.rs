@@ -173,6 +173,10 @@ impl HttpHeaders {
         Ok(())
     }
 
+    pub fn insert(&mut self, key: String, value: String) -> Option<String>{
+        self.headers.insert(key, value)
+    }
+
     pub fn content_length(&self) -> Option<usize> {
         match self.headers.get(&"content-length".to_string()) {
             Some(v) => match v.parse::<usize>() {
