@@ -29,14 +29,13 @@ impl HttpServer {
     }
 
     fn handle(&self, stream: TcpStream) -> Result<(), HttpError> {
-        let mut req = self.recv(BufReader::new(&stream))?;
+        let mut req = Self::recv(BufReader::new(&stream))?;
         let resp = self.handler.handle(&mut req)?;
-        self.send(&resp, BufWriter::new(&stream))
-            .map_err(HttpError::from)?;
+        Self::send(&resp, BufWriter::new(&stream)).map_err(HttpError::from)?;
         Ok(())
     }
 
-    fn recv<T: Read>(&self, mut reader: BufReader<T>) -> Result<HttpRequest, HttpError> {
+    fn recv<T: Read>(mut reader: BufReader<T>) -> Result<HttpRequest, HttpError> {
         let mut line = String::new();
         reader.read_line(&mut line).map_err(HttpError::from)?;
         let mut iter = line.trim_end_matches("\r\n").splitn(3, " ");
@@ -77,7 +76,7 @@ impl HttpServer {
         })
     }
 
-    fn send<T: Write>(&self, resp: &HttpResponse, mut writer: BufWriter<T>) -> std::io::Result<()> {
+    fn send<T: Write>(resp: &HttpResponse, mut writer: BufWriter<T>) -> std::io::Result<()> {
         write!(
             writer,
             "{} {} {}\r\n",
