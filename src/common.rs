@@ -179,3 +179,38 @@ impl HttpHeaders {
         self.headers.contains_key(key)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_httpheaders_write_to_empty() {
+        let headers = HttpHeaders::new();
+        let mut writer = BufWriter::new(Vec::new());
+
+        headers.write_to(&mut writer).unwrap();
+        let mut buf = Vec::new();
+        buf.copy_from_slice(writer.get_ref());
+        let actual = String::from_utf8(buf).unwrap();
+
+        assert_eq!("", &actual);
+    }
+
+    #[test]
+    fn test_httpheaders_write_to() {
+        let mut headers = HttpHeaders::new();
+        headers.headers.insert("a".to_string(), "b".to_string());
+        headers.headers.insert("c".to_string(), "d".to_string());
+        let mut writer = BufWriter::new(Vec::new());
+
+        headers.write_to(&mut writer).unwrap();
+        writer.flush().unwrap();
+
+        let mut buf = vec![0u8; writer.get_ref().len()];
+        buf.copy_from_slice(writer.get_ref());
+        let actual = String::from_utf8(buf).unwrap();
+
+        assert_eq!("a: b\r\nc: d\r\n", &actual); // 順序は保存されない気がする...
+    }
+}
